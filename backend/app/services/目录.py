@@ -17,6 +17,10 @@ def 总览() -> dict:
             "旁置数": 数("SELECT COUNT(*) FROM 旁置簿"),
             "抽取批次数": 数("SELECT COUNT(*) FROM 抽取批次"),
             "回放批次数": 数("SELECT COUNT(*) FROM 回放批次"),
+            "分片总批数": 数("SELECT COUNT(*) FROM 分片总批"),
+            "未完成分片总批": 数(
+                "SELECT COUNT(*) FROM 分片总批 WHERE 状态 IN ('运行中','未完成')"
+            ),
         }
     finally:
         conn.close()

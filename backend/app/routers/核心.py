@@ -16,6 +16,25 @@ class 装载请求(BaseModel):
 class 营业日请求(BaseModel):
     营业日: str
     批次编号: str = ""
+    分片总批编号: str = ""
+    诊断: bool = False
+
+
+class 分片总批请求(BaseModel):
+    营业日: str
+    每片账户数: int = 1
+    账户键们: list[str] = Field(default_factory=list)
+    自动运行: bool = True
+    注入失败片序: str = ""
+
+
+class 运行片请求(BaseModel):
+    片序: int
+    注入失败: str = ""
+
+
+class 封成请求(BaseModel):
+    编号: str = ""
 
 
 @路由.get("/健康")
@@ -209,7 +228,67 @@ def 执行抽取(体: 营业日请求):
 @路由.post("/回放")
 def 执行回放(体: 营业日请求):
     try:
-        return 回放.回放核对(体.营业日, 体.批次编号)
+        return 回放.回放核对(体.营业日, 体.批次编号, 体.分片总批编号, 体.诊断)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+# ---------------------------------------------------------------- 分片总批
+
+
+def _分片():
+    from app.modules import 账户分片抽取
+
+    return 账户分片抽取
+
+
+@路由.get("/分片总批")
+def 列分片总批():
+    return _分片().列总批()
+
+
+@路由.get("/分片总批/{batch_id}")
+def 取分片总批(batch_id: str):
+    try:
+        return _分片().读总批(batch_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@路由.get("/分片总批/{batch_id}/核证")
+def 核证分片总批(batch_id: str):
+    try:
+        return _分片().核证(batch_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@路由.post("/分片总批")
+def 开分片总批(体: 分片总批请求):
+    try:
+        return _分片().开总批(
+            体.营业日,
+            体.每片账户数,
+            体.账户键们,
+            体.自动运行,
+            体.注入失败片序,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@路由.post("/分片总批/{batch_id}/运行片")
+def 运行分片(batch_id: str, 体: 运行片请求):
+    try:
+        return _分片().运行片(batch_id, 体.片序, 体.注入失败)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@路由.post("/分片总批/{batch_id}/封成")
+def 封成分片总批(batch_id: str):
+    try:
+        return _分片().补齐并封成(batch_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -229,6 +308,8 @@ def 重置():
             "跳变记录",
             "旁置簿",
             "装载批次",
+            "分片任务",
+            "分片总批",
         ):
             conn.execute(f"DELETE FROM {t}")
         conn.commit()

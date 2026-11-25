@@ -89,7 +89,56 @@ CREATE TABLE IF NOT EXISTS 装载批次 (
   时刻 TEXT NOT NULL,
   报告 TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS 分片总批 (
+  编号 TEXT PRIMARY KEY,
+  营业日 TEXT NOT NULL,
+  口径 TEXT NOT NULL DEFAULT '乙-部分成功+未完成总批',
+  状态 TEXT NOT NULL DEFAULT '运行中',
+  分片数 INTEGER NOT NULL,
+  声明账户集合 TEXT NOT NULL DEFAULT '[]',
+  声明账户数 INTEGER NOT NULL DEFAULT 0,
+  已成功片数 INTEGER NOT NULL DEFAULT 0,
+  失败片数 INTEGER NOT NULL DEFAULT 0,
+  可当全量回放 INTEGER NOT NULL DEFAULT 0,
+  失败账户集合 TEXT NOT NULL DEFAULT '[]',
+  报告 TEXT NOT NULL DEFAULT '{}',
+  版本 INTEGER NOT NULL DEFAULT 0,
+  时刻 TEXT NOT NULL,
+  汇总时刻 TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS 分片任务 (
+  总批编号 TEXT NOT NULL,
+  批内序 INTEGER NOT NULL,
+  营业日 TEXT NOT NULL,
+  账户集合 TEXT NOT NULL,
+  账户数 INTEGER NOT NULL,
+  状态 TEXT NOT NULL DEFAULT '待运行',
+  失败原因 TEXT NOT NULL DEFAULT '',
+  抽取批次编号 TEXT NOT NULL DEFAULT '',
+  快照数 INTEGER NOT NULL DEFAULT 0,
+  重试次数 INTEGER NOT NULL DEFAULT 0,
+  开始时刻 TEXT NOT NULL DEFAULT '',
+  结束时刻 TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (总批编号, 批内序),
+  FOREIGN KEY (总批编号) REFERENCES 分片总批(编号) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_分片任务_总批 ON 分片任务(总批编号);
 """
+
+# 兼容既有库：进程内 ALTER TABLE 补列（CREATE TABLE IF NOT EXISTS 不会改老表）。
+迁移列 = [
+    ("周期快照", "总批编号", "TEXT NOT NULL DEFAULT ''"),
+    ("周期快照", "片序", "INTEGER NOT NULL DEFAULT 0"),
+    ("分片总批", "版本", "INTEGER NOT NULL DEFAULT 0"),
+    ("分片任务", "抽取批次编号", "TEXT NOT NULL DEFAULT ''"),
+]
+
+
+def _补列(conn) -> None:
+    for 表, 列, 定义 in 迁移列:
+        现有 = {r["name"] for r in conn.execute(f"PRAGMA table_info({表})")}
+        if 列 not in 现有:
+            conn.execute(f"ALTER TABLE {表} ADD COLUMN {列} {定义}")
 
 空桩模块 = [
     "开户首日无前日",
@@ -124,6 +173,7 @@ def 此刻() -> str:
 def 初始化库() -> None:
     conn = 连接()
     conn.executescript(建表)
+    _补列(conn)
     if conn.execute("SELECT COUNT(*) AS c FROM 台参").fetchone()["c"] == 0:
         for k, v in {
             "站名": "日镜账",

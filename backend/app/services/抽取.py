@@ -3,7 +3,7 @@ import uuid
 from typing import Any
 
 from app.db import 连接
-from app.services.时间 import 此刻, 标准化营业日
+from app.services.时间 import 此刻, 前一营业日, 标准化营业日
 
 
 def _台参(conn) -> dict[str, str]:
@@ -11,10 +11,7 @@ def _台参(conn) -> dict[str, str]:
 
 
 def _前日(营业日: str) -> str:
-    y, m, d = map(int, 营业日.split("-"))
-    from datetime import date, timedelta
-
-    return (date(y, m, d) - timedelta(days=1)).isoformat()
+    return 前一营业日(营业日)
 
 
 def 日终抽取(营业日: str, 批次编号: str = "") -> dict[str, Any]:
